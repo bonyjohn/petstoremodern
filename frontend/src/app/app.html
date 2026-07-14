@@ -1,10 +1,27 @@
-<p-toolbar>
+<p-toolbar styleClass="app-toolbar">
   <div class="p-toolbar-group-start">
-    <h1>Pet Store</h1>
+    <a routerLink="/" class="app-title"><h1>Pet Store</h1></a>
   </div>
-  <div class="p-toolbar-group-end">
+  <div class="p-toolbar-group-end app-toolbar-controls">
+    <p-inputgroup class="app-search">
+      <input
+        pInputText
+        type="text"
+        placeholder="Search"
+        [(ngModel)]="searchQuery"
+        (keyup.enter)="onSearch()"
+      />
+      <p-button icon="pi pi-search" (onClick)="onSearch()" />
+    </p-inputgroup>
+    <p-select
+      [options]="locales"
+      [ngModel]="localeService.locale()"
+      (ngModelChange)="onLocaleChange($event)"
+    />
     <p-button label="Sign In" icon="pi pi-user" />
   </div>
 </p-toolbar>
 
-<router-outlet />
+<main class="app-container">
+  <router-outlet />
+</main>
