@@ -1,0 +1,18 @@
+# Maven
+target/
+
+# Angular / Node
+node_modules/
+dist/
+.angular/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
