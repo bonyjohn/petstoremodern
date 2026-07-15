@@ -8,7 +8,7 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { CartService } from '../cart.service';
 import { LocaleService } from '../../catalog/locale.service';
 
-/** Cart page: line items, quantities, subtotal, and a checkout stub (Part 4). */
+/** Cart page: line items, quantities, subtotal, and checkout. */
 @Component({
   selector: 'app-cart',
   imports: [RouterLink, FormsModule, ButtonModule, InputNumberModule, CurrencyPipe],
@@ -39,7 +39,7 @@ import { LocaleService } from '../../catalog/locale.service';
         <span class="subtotal-label">Subtotal</span>
         <span class="subtotal-value">{{ cartService.subtotal() | currency: currencyCode() }}</span>
       </div>
-      <p-button label="Checkout" icon="pi pi-credit-card" [disabled]="true" />
+      <p-button label="Checkout" icon="pi pi-credit-card" routerLink="/checkout" />
     }
   `,
   styles: `

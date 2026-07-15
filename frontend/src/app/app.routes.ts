@@ -10,6 +10,8 @@ import { SignupPage } from './auth/pages/signup';
 import { AccountPage } from './auth/pages/account';
 import { authGuard } from './auth/auth.guard';
 import { CartPage } from './cart/pages/cart';
+import { CheckoutPage } from './order/pages/checkout';
+import { ConfirmationPage } from './order/pages/confirmation';
 
 export const routes: Routes = [
   { path: '', component: Home },
@@ -21,4 +23,6 @@ export const routes: Routes = [
   { path: 'signup', component: SignupPage },
   { path: 'account', component: AccountPage, canActivate: [authGuard] },
   { path: 'cart', component: CartPage },
+  { path: 'checkout', component: CheckoutPage, canActivate: [authGuard] },
+  { path: 'orders/:id', component: ConfirmationPage, canActivate: [authGuard] },
 ];
