@@ -12,6 +12,7 @@ import { authGuard } from './auth/auth.guard';
 import { CartPage } from './cart/pages/cart';
 import { CheckoutPage } from './order/pages/checkout';
 import { ConfirmationPage } from './order/pages/confirmation';
+import { adminGuard } from './admin/admin.guard';
 
 export const routes: Routes = [
   { path: '', component: Home },
@@ -25,4 +26,15 @@ export const routes: Routes = [
   { path: 'cart', component: CartPage },
   { path: 'checkout', component: CheckoutPage, canActivate: [authGuard] },
   { path: 'orders/:id', component: ConfirmationPage, canActivate: [authGuard] },
+  // Lazy: keeps AG Grid (admin-only) out of the shopper-facing initial bundle.
+  {
+    path: 'admin/orders',
+    loadComponent: () => import('./admin/pages/admin-orders').then((m) => m.AdminOrdersPage),
+    canActivate: [adminGuard],
+  },
+  {
+    path: 'admin/inventory',
+    loadComponent: () => import('./admin/pages/admin-inventory').then((m) => m.AdminInventoryPage),
+    canActivate: [adminGuard],
+  },
 ];

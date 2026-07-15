@@ -22,6 +22,7 @@ import com.petstore.core.order.document.OrderLine;
 import com.petstore.core.order.document.OrderStatus;
 import com.petstore.core.order.document.StatusChange;
 import com.petstore.core.order.repository.OrderRepository;
+import com.petstore.core.order.web.AdminOrderResponse;
 import com.petstore.core.order.web.OrderAddressDto;
 import com.petstore.core.order.web.OrderContactDto;
 import com.petstore.core.order.web.OrderLineRequest;
@@ -87,6 +88,17 @@ public class OrderService {
 	public List<OrderResponse> listOwn(String userId) {
 		return orderRepository.findByUserIdOrderByOrderDateDesc(userId).stream()
 				.map(this::toResponse)
+				.toList();
+	}
+
+	/** All orders for the admin grid, optionally filtered by status, newest first. */
+	public List<AdminOrderResponse> listForAdmin(OrderStatus status) {
+		List<OrderDocument> orders = status == null
+				? orderRepository.findAllByOrderByOrderDateDesc()
+				: orderRepository.findByStatusOrderByOrderDateDesc(status);
+		return orders.stream()
+				.map(order -> new AdminOrderResponse(order.id(), order.userId(), order.orderDate(),
+						order.locale(), order.totalValue(), order.status().name()))
 				.toList();
 	}
 

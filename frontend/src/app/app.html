@@ -24,6 +24,9 @@
       </p-overlaybadge>
     </a>
     @if (authService.isAuthenticated()) {
+      @if (authService.roles().includes('ADMIN')) {
+        <a routerLink="/admin/orders" class="account-link">Admin</a>
+      }
       <a routerLink="/account" class="account-link">{{ authService.username() }}</a>
       <p-button label="Sign Out" icon="pi pi-sign-out" severity="secondary" (onClick)="onLogout()" />
     } @else {

@@ -37,6 +37,10 @@ public class SecurityConfig {
 				.requestMatchers("/actuator/health", "/actuator/info").permitAll()
 				.requestMatchers("/api/auth/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
+				.requestMatchers("/api/admin/**").hasRole("ADMIN")
+				// Service-to-service callback: authenticated by a shared X-Internal-Token
+				// header checked in the controller, not by a user JWT.
+				.requestMatchers("/api/internal/**").permitAll()
 				.requestMatchers("/api/**").authenticated()
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));

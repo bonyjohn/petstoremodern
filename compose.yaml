@@ -1,15 +1,23 @@
 services:
   mongodb:
     image: mongo:8
+    # Single-node replica set: change streams (used by the fulfillment service)
+    # require a replica set, and one member is plenty for local development.
+    # The healthcheck doubles as the initializer: it initiates the replica set
+    # on first run and reports healthy once a primary exists, so plain
+    # `docker compose up` stays a one-command start.
+    command: [--replSet, rs0, --bind_ip_all]
     ports:
       - "27017:27017"
     volumes:
       - mongodb-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: |
+        mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]}).ok }"
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
 volumes:
   mongodb-data:
