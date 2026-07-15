@@ -18,7 +18,17 @@
       [ngModel]="localeService.locale()"
       (ngModelChange)="onLocaleChange($event)"
     />
-    <p-button label="Sign In" icon="pi pi-user" />
+    <a routerLink="/cart" class="cart-link">
+      <p-overlaybadge [value]="cartService.count() ? cartService.count() : undefined" severity="danger">
+        <i class="pi pi-shopping-cart" style="font-size: 1.25rem"></i>
+      </p-overlaybadge>
+    </a>
+    @if (authService.isAuthenticated()) {
+      <a routerLink="/account" class="account-link">{{ authService.username() }}</a>
+      <p-button label="Sign Out" icon="pi pi-sign-out" severity="secondary" (onClick)="onLogout()" />
+    } @else {
+      <p-button label="Sign In" icon="pi pi-user" routerLink="/login" />
+    }
   </div>
 </p-toolbar>
 

@@ -6,11 +6,9 @@ import { TagModule } from 'primeng/tag';
 import { CatalogService } from '../catalog.service';
 import { LocaleService } from '../locale.service';
 import { ItemResponse } from '../catalog.models';
+import { CartService } from '../../cart/cart.service';
 
-/**
- * Item detail page: image, description, price, and an Add-to-Cart button.
- * The cart itself is Part 3 — the button is a disabled stub here.
- */
+/** Item detail page: image, description, price, and an Add-to-Cart button. */
 @Component({
   selector: 'app-item',
   imports: [ButtonModule, TagModule, CurrencyPipe],
@@ -26,7 +24,7 @@ import { ItemResponse } from '../catalog.models';
             <p-tag [value]="attribute" />
           }
           <div>
-            <p-button label="Add to Cart" icon="pi pi-shopping-cart" [disabled]="true" />
+            <p-button label="Add to Cart" icon="pi pi-shopping-cart" (onClick)="onAddToCart(item)" />
           </div>
         </div>
       </div>
@@ -70,6 +68,7 @@ export class ItemPage {
 
   private readonly catalogService = inject(CatalogService);
   private readonly localeService = inject(LocaleService);
+  private readonly cartService = inject(CartService);
 
   readonly currencyCode = this.localeService.currencyCode;
   readonly item = signal<ItemResponse | undefined>(undefined);
@@ -79,6 +78,16 @@ export class ItemPage {
       this.catalogService.item(this.id(), this.localeService.locale()).subscribe((result) => {
         this.item.set(result);
       });
+    });
+  }
+
+  onAddToCart(item: ItemResponse): void {
+    this.cartService.add({
+      itemId: item.itemId,
+      productId: item.productId,
+      name: item.name,
+      image: item.image,
+      unitPrice: item.listPrice,
     });
   }
 }
