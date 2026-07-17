@@ -77,7 +77,7 @@ public class CustomerService {
 		CustomerDocument existing = findOrThrow(username);
 		CustomerDocument updated = new CustomerDocument(
 				existing.id(), existing.passwordHash(), existing.roles(),
-				toAccount(request.account()), toProfile(request.profile()));
+				toAccount(request.account(), existing.account()), toProfile(request.profile()));
 		return toResponse(customerRepository.save(updated));
 	}
 
@@ -116,7 +116,18 @@ public class CustomerService {
 		if (creditCard == null) {
 			return null;
 		}
-		return new CreditCardDto(creditCard.cardNumber(), creditCard.cardType(), creditCard.expiryDate());
+		// The full PAN never leaves the API — responses carry a masked number only.
+		return new CreditCardDto(maskCardNumber(creditCard.cardNumber()), creditCard.cardType(),
+				creditCard.expiryDate());
+	}
+
+	/** {@code "123456789"} -&gt; {@code "**** 6789"}. */
+	private String maskCardNumber(String cardNumber) {
+		if (cardNumber == null) {
+			return null;
+		}
+		String last4 = cardNumber.length() <= 4 ? cardNumber : cardNumber.substring(cardNumber.length() - 4);
+		return "**** " + last4;
 	}
 
 	private ProfileDto toProfileDto(Profile profile) {
@@ -127,8 +138,9 @@ public class CustomerService {
 				profile.myListPreference(), profile.bannerPreference());
 	}
 
-	private Account toAccount(AccountDto dto) {
-		return new Account(toContactInfo(dto.contactInfo()), toCreditCard(dto.creditCard()));
+	private Account toAccount(AccountDto dto, Account existing) {
+		CreditCard existingCard = existing == null ? null : existing.creditCard();
+		return new Account(toContactInfo(dto.contactInfo()), toCreditCard(dto.creditCard(), existingCard));
 	}
 
 	private ContactInfo toContactInfo(ContactInfoDto dto) {
@@ -145,11 +157,17 @@ public class CustomerService {
 		return new Address(dto.street(), dto.city(), dto.state(), dto.zipCode(), dto.country());
 	}
 
-	private CreditCard toCreditCard(CreditCardDto dto) {
+	private CreditCard toCreditCard(CreditCardDto dto, CreditCard existing) {
 		if (dto == null) {
 			return null;
 		}
-		return new CreditCard(dto.cardNumber(), dto.cardType(), dto.expiryDate());
+		// A masked incoming number means the client is round-tripping what we
+		// served; keep the stored value instead of overwriting the card with the
+		// mask. A new (unmasked) number replaces it.
+		String cardNumber = dto.cardNumber() != null && dto.cardNumber().contains("*") && existing != null
+				? existing.cardNumber()
+				: dto.cardNumber();
+		return new CreditCard(cardNumber, dto.cardType(), dto.expiryDate());
 	}
 
 	private Profile toProfile(ProfileDto dto) {

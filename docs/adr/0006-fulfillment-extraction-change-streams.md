@@ -26,7 +26,35 @@ core's small JWT config: the services share a token format, not a library.
 **resume token is checkpointed** in `fulfillment_checkpoints`; on startup the
 stream resumes from it, so orders approved while the service was down are
 processed on restart (integration-tested by killing and restarting the
-consumer). First-ever start begins at the current time.
+consumer).
+
+**The change stream is a latency optimization; a reconciliation sweep is the
+delivery guarantee.** The sweep queries `orders` for `status ∈ [APPROVED,
+PARTIALLY_SHIPPED]` with any line's `qtyShipped < qty` and feeds each to the
+same idempotent processor. It runs (a) before opening the stream whenever no
+checkpoint exists — a first-ever start would otherwise begin at "now" and
+permanently miss anything approved earlier; (b) when the checkpointed resume
+token has aged out of the oplog (`ChangeStreamHistoryLost`, code 286): the
+dead checkpoint is dropped, the sweep covers the gap, and the stream reopens
+fresh — never an infinite retry on a dead token; and (c) periodically
+(`petstore.fulfillment.sweep-interval`), which also restores the legacy
+backorder behavior: an order stalled on empty stock ships within one interval
+of restocking. With a checkpoint present the resumed stream replays missed
+events itself and the acquire-time sweep is deliberately skipped — replayed
+*insert* events carry insert-time state, so sweeping on top of a resume would
+double-process them.
+
+**Exactly one active consumer, enforced by a lease.** Two independent
+consumers would each decrement inventory for the same approved order (the
+qtyShipped guard protects the order document, not stock), so consumption is
+deliberately single-instance: a TTL'd lease document (same
+`fulfillment_checkpoints` collection, different `_id`) is acquired and renewed
+with an atomic conditional upsert — the same findAndModify primitive as the
+core's order-id counters. A standby instance polls, takes over when the
+holder's lease expires or is released, and resumes from the shared checkpoint;
+that lease is the HA story. Scaling *throughput* beyond one consumer means
+partitioned streams or a real broker — the same evolution path already named
+below.
 
 **Delivery is at-least-once, made safe by two guards.** For each line the
 service ships `min(qty − qtyShipped, quantityOnHand)`, decrementing inventory
@@ -47,12 +75,16 @@ OAuth2 client-credentials in production.
 
 ## Consequences
 
-- Kill/restart and replay behavior are asserted by integration tests, not
-  assumed — the properties the legacy got from JMS persistence are proven,
-  not inherited.
+- Kill/restart, replay, first-ever-start, restock-after-stall, and lease
+  takeover are asserted by integration tests, not assumed — the properties the
+  legacy got from JMS persistence are proven, not inherited.
 - Collections-as-contract couples the services to the `orders` document
   schema; a schema registry / versioned events would replace this at scale.
 - The change stream requires a replica set, so local dev Mongo runs as a
   single-node replica set (compose handles initiation).
 - One more service to run locally — a second `spring-boot:run` or IDE launch;
-  it tolerates starting late, catching up from its checkpoint.
+  starting late is safe: with a checkpoint it catches up from the stream, and
+  without one the pre-stream sweep ships whatever it missed.
+- The sweep can re-ship an order whose callback is still in flight — the same
+  bounded window as the decrement→callback crash above, capped per line by
+  the remaining quantity; the outbox/transaction fix covers both.

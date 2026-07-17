@@ -1,11 +1,14 @@
 package com.petstore.core.order.service;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -23,50 +26,62 @@ import com.petstore.core.order.web.ShipmentLine;
  * Applies shipment callbacks from the fulfillment service. Guarded per line —
  * {@code qtyShipped} never exceeds {@code qty} — so the at-least-once delivery
  * of the change-stream pipeline is safe: replaying a callback for a fully
- * shipped line changes nothing.
+ * shipped line changes nothing. The write is a conditional update with the
+ * read status as its precondition, so a concurrent transition can't be
+ * silently overwritten; on a lost race we re-read once and re-apply.
  */
 @Service
 public class ShipmentService {
 
 	private final OrderRepository orderRepository;
 	private final EventPublisher eventPublisher;
+	private final MongoTemplate mongoTemplate;
 
-	public ShipmentService(OrderRepository orderRepository, EventPublisher eventPublisher) {
+	public ShipmentService(OrderRepository orderRepository, EventPublisher eventPublisher,
+			MongoTemplate mongoTemplate) {
 		this.orderRepository = orderRepository;
 		this.eventPublisher = eventPublisher;
+		this.mongoTemplate = mongoTemplate;
 	}
 
 	public void recordShipments(String orderId, List<ShipmentLine> shipments) {
-		OrderDocument order = orderRepository.findById(orderId)
-				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such order: " + orderId));
-
 		Map<String, Integer> reportedByItem = shipments.stream()
 				.collect(Collectors.toMap(ShipmentLine::itemId, ShipmentLine::qtyShipped, Integer::sum));
 
-		List<OrderLine> lines = order.lines().stream()
-				.map(line -> applyShipment(line, reportedByItem.getOrDefault(line.itemId(), 0)))
-				.toList();
+		for (int attempt = 0; attempt < 2; attempt++) {
+			OrderDocument order = orderRepository.findById(orderId)
+					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such order: " + orderId));
 
-		OrderStatus target = statusFor(lines);
-		// A replay that leaves the status where it is (e.g. still PARTIALLY_SHIPPED)
-		// is a no-op, not an illegal transition.
-		OrderStatus next = target == order.status() ? order.status()
-				: OrderTransitions.next(order.status(), target);
+			List<OrderLine> lines = order.lines().stream()
+					.map(line -> applyShipment(line, reportedByItem.getOrDefault(line.itemId(), 0)))
+					.toList();
 
-		List<StatusChange> history = order.statusHistory();
-		boolean changed = next != order.status();
-		if (changed) {
-			history = new ArrayList<>(history);
-			history.add(new StatusChange(next, Instant.now()));
-		}
+			OrderStatus target = statusFor(lines);
+			boolean statusChanged = target != order.status();
+			if (!statusChanged && lines.equals(order.lines())) {
+				return; // replay no-op: nothing new shipped, nothing to transition
+			}
+			if (statusChanged) {
+				OrderTransitions.next(order.status(), target); // throws on an illegal pair
+			}
 
-		orderRepository.save(new OrderDocument(
-				order.id(), order.userId(), order.email(), order.locale(), order.orderDate(),
-				next, history, order.totalValue(), order.shipTo(), order.billTo(),
-				order.creditCard(), lines));
+			Update update = new Update().set("lines", lines).set("status", target);
+			if (statusChanged) {
+				update.push("statusHistory", new StatusChange(target, Instant.now()));
+			}
+			long modified = mongoTemplate.updateFirst(
+					Query.query(Criteria.where("_id").is(orderId).and("status").is(order.status())),
+					update,
+					OrderDocument.class).getModifiedCount();
 
-		if (changed) {
-			eventPublisher.publish(new OrderStatusChangedEvent(order.id(), next.name(), order.email()));
+			if (modified == 1) {
+				if (statusChanged) {
+					eventPublisher.publish(new OrderStatusChangedEvent(order.id(), target.name(), order.email()));
+				}
+				return;
+			}
+			// Lost the race to a concurrent transition: loop once to re-read and
+			// re-apply; if the second pass finds nothing left to do it no-ops.
 		}
 	}
 

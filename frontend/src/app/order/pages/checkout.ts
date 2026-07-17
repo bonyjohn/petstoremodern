@@ -1,14 +1,18 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { CheckboxModule } from 'primeng/checkbox';
 import { MessageModule } from 'primeng/message';
+import { forkJoin } from 'rxjs';
 
 import { CartService } from '../../cart/cart.service';
+import { CatalogService } from '../../catalog/catalog.service';
 import { LocaleService } from '../../catalog/locale.service';
+import { ItemResponse } from '../../catalog/catalog.models';
 import { CustomerService } from '../../auth/customer.service';
 import { OrderService } from '../order.service';
 import { OrderContact, OrderCreditCard } from '../order.models';
@@ -81,15 +85,20 @@ function emptyContact(): OrderContact {
 
       <div class="summary">
         <h3>Your order</h3>
-        @for (item of cartService.items(); track item.itemId) {
+        @for (line of cartService.items(); track line.itemId) {
           <div class="summary-line">
-            <span>{{ item.name }} × {{ item.qty }}</span>
-            <span>{{ item.qty * item.unitPrice | currency: currencyCode() }}</span>
+            @if (itemFor(line.itemId); as item) {
+              <span>{{ item.name }} × {{ line.qty }}</span>
+              <span>{{ line.qty * item.listPrice | currency: currencyCode() }}</span>
+            } @else {
+              <span>{{ line.itemId }} × {{ line.qty }}</span>
+              <span>…</span>
+            }
           </div>
         }
         <div class="summary-line subtotal">
           <span>Subtotal</span>
-          <span>{{ cartService.subtotal() | currency: currencyCode() }}</span>
+          <span>{{ subtotal() | currency: currencyCode() }}</span>
         </div>
         <p class="note">Prices are confirmed by the store at checkout.</p>
         @if (error()) {
@@ -166,11 +175,22 @@ function emptyContact(): OrderContact {
 export class CheckoutPage {
   protected readonly cartService = inject(CartService);
   private readonly localeService = inject(LocaleService);
+  private readonly catalogService = inject(CatalogService);
   private readonly customerService = inject(CustomerService);
   private readonly orderService = inject(OrderService);
   private readonly router = inject(Router);
 
   protected readonly currencyCode = this.localeService.currencyCode;
+  private readonly resolved = signal<Map<string, ItemResponse>>(new Map());
+  private lastFetchKey = '';
+
+  protected readonly subtotal = computed(() => {
+    const resolved = this.resolved();
+    return this.cartService.items().reduce((sum, line) => {
+      const item = resolved.get(line.itemId);
+      return sum + (item ? item.listPrice * line.qty : 0);
+    }, 0);
+  });
 
   protected readonly shipTo = emptyContact();
   protected readonly billTo = emptyContact();
@@ -189,6 +209,25 @@ export class CheckoutPage {
   });
 
   constructor() {
+    // Same locale-aware price resolution as the cart page: the summary must
+    // show the current locale's own prices, not add-to-cart-time snapshots.
+    effect(() => {
+      const locale = this.localeService.locale();
+      const ids = this.cartService.items().map((line) => line.itemId);
+      const fetchKey = locale + '|' + ids.join(',');
+      if (fetchKey === this.lastFetchKey) {
+        return;
+      }
+      this.lastFetchKey = fetchKey;
+      if (ids.length === 0) {
+        this.resolved.set(new Map());
+        return;
+      }
+      forkJoin(ids.map((id) => this.catalogService.item(id, locale))).subscribe((items) => {
+        this.resolved.set(new Map(items.map((item) => [item.itemId, item])));
+      });
+    });
+
     this.customerService.me().subscribe((customer) => {
       const contactInfo = customer.account?.contactInfo;
       if (contactInfo) {
@@ -235,10 +274,21 @@ export class CheckoutPage {
           this.cartService.clear();
           this.router.navigate(['/orders', order.orderId]);
         },
-        error: () => {
+        error: (err: HttpErrorResponse) => {
           this.placing.set(false);
-          this.error.set('Could not place the order. Please check the form and try again.');
+          // Surface the server's reason when it gives one; the default error
+          // body carries none, so name the likeliest 400 cause ourselves (the
+          // server rejects items with no price in the selected locale).
+          const serverMessage = err.error?.message ?? err.error?.detail;
+          const fallback = err.status === 400
+            ? 'Could not place the order — an item may not be available in the selected locale.'
+            : 'Could not place the order. Please check the form and try again.';
+          this.error.set(serverMessage ?? fallback);
         },
       });
+  }
+
+  itemFor(itemId: string): ItemResponse | undefined {
+    return this.resolved().get(itemId);
   }
 }

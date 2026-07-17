@@ -1,5 +1,8 @@
 package com.petstore.core.order.web;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,7 +40,9 @@ public class InternalOrderController {
 	public void shipments(@PathVariable String id,
 			@RequestHeader(name = "X-Internal-Token", required = false) String token,
 			@Valid @RequestBody ShipmentRequest request) {
-		if (!internalToken.equals(token)) {
+		// Constant-time comparison — a plain equals() leaks a timing oracle.
+		if (token == null || !MessageDigest.isEqual(
+				internalToken.getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8))) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "bad internal token");
 		}
 		shipmentService.recordShipments(id, request.shipments());

@@ -1,10 +1,11 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { TagModule } from 'primeng/tag';
 
 import { OrderService } from '../order.service';
 import { OrderResponse } from '../order.models';
-import { LocaleService } from '../../catalog/locale.service';
+import { currencyCodeFor } from '../../catalog/locale.service';
 
 /**
  * Order confirmation / detail page: id, status, server-priced lines, total.
@@ -13,7 +14,7 @@ import { LocaleService } from '../../catalog/locale.service';
  */
 @Component({
   selector: 'app-confirmation',
-  imports: [TagModule, CurrencyPipe, DatePipe],
+  imports: [RouterLink, TagModule, CurrencyPipe, DatePipe],
   template: `
     @if (order(); as order) {
       <div class="order-header">
@@ -40,6 +41,7 @@ import { LocaleService } from '../../catalog/locale.service';
       @if (order.status === 'PENDING') {
         <p class="pending-note">This order is awaiting approval — we'll email you when it's confirmed.</p>
       }
+      <p class="all-orders"><a routerLink="/orders">View all orders</a></p>
     }
   `,
   styles: `
@@ -79,16 +81,21 @@ import { LocaleService } from '../../catalog/locale.service';
       margin-top: 1.5rem;
       color: #6b6b6b;
     }
+    .all-orders {
+      margin-top: 1.5rem;
+      font-size: 0.9rem;
+    }
   `,
 })
 export class ConfirmationPage {
   readonly id = input.required<string>();
 
   private readonly orderService = inject(OrderService);
-  private readonly localeService = inject(LocaleService);
 
-  protected readonly currencyCode = this.localeService.currencyCode;
   protected readonly order = signal<OrderResponse | undefined>(undefined);
+  // An order's total is in its own locale's currency — a ja_JP order stays ¥
+  // even while browsing in en_US.
+  protected readonly currencyCode = computed(() => currencyCodeFor(this.order()?.locale ?? 'en_US'));
 
   constructor() {
     effect(() => {

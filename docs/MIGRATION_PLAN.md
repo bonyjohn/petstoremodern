@@ -65,7 +65,7 @@ transformation; when they don't, they go.
 | **Environment resurrection** — the legacy app barely runs anywhere modern | Treat seed data + documented flows as the spec; never depend on executing the legacy system to make progress |
 | **Data fidelity** — e.g. three *independent* per-locale price lists per item (¥1951 is not converted $16.50) | Migrate verbatim, never canonicalize; characterization tests pin exact values; seeders count and log every dropped record/locale |
 | **Auth upgrade** — legacy stores plaintext passwords | Hash at migration time (BCrypt); the migration parser is the only code that ever reads the plaintext; tests assert hash ≠ plaintext and that legacy credentials still log in |
-| **Async semantics** — order pipeline must stay async and restart-safe without JMS | In-process events behind `EventPublisher` (broker-swappable), then a change stream with resume-token checkpoints; at-least-once made safe by qtyShipped-guarded callbacks and bounded inventory decrements; kill/restart and replay are integration-tested |
+| **Async semantics** — order pipeline must stay async and restart-safe without JMS | In-process events behind `EventPublisher` (broker-swappable), then a change stream with resume-token checkpoints; a reconciliation sweep as the delivery guarantee; at-least-once made safe (bar a documented crash window) by qtyShipped-guarded callbacks and bounded inventory decrements; kill/restart, replay, first-start and restock catch-up are integration-tested |
 | **Boundary erosion** — modules quietly coupling | ArchUnit fails the build on any cross-module or application→migration dependency |
 
 ## 5. At 100× scale
@@ -96,3 +96,4 @@ The shape of the plan survives; the constants change:
 | UI tests → build-verified only | Thin presentation over a tested API; component tests would re-assert the API's tests through a browser | Playwright happy-path e2e over the demo flows |
 | Server-side cart → client-side | Legacy kept carts in server session; a cart is client state until checkout, and checkout re-prices server-side anyway | Persist carts server-side only if cross-device carts become a requirement |
 | Shared-token internal callback | Service-to-service auth without an identity provider in local dev | mTLS or OAuth2 client-credentials between services |
+| **My Orders page (ADDITION over legacy)** | The legacy storefront had no order-history screen; the order aggregate + `GET /api/orders` made it a 30-minute page — the modernization dividend, not a cut | — |

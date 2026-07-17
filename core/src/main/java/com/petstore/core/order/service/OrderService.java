@@ -25,6 +25,7 @@ import com.petstore.core.order.repository.OrderRepository;
 import com.petstore.core.order.web.AdminOrderResponse;
 import com.petstore.core.order.web.OrderAddressDto;
 import com.petstore.core.order.web.OrderContactDto;
+import com.petstore.core.order.web.OrderCreditCardDto;
 import com.petstore.core.order.web.OrderLineRequest;
 import com.petstore.core.order.web.OrderLineResponse;
 import com.petstore.core.order.web.OrderResponse;
@@ -69,13 +70,13 @@ public class OrderService {
 			totalValue = totalValue.add(line.unitPrice().multiply(BigDecimal.valueOf(line.qty())));
 		}
 
+		Document customer = mongoTemplate.findById(userId, Document.class, "customers");
 		String orderId = orderIdGenerator.nextOrderId();
 		OrderDocument order = new OrderDocument(
-				orderId, userId, customerEmail(userId), locale, now,
+				orderId, userId, customerEmail(customer), locale, now,
 				OrderStatus.PENDING, List.of(new StatusChange(OrderStatus.PENDING, now)), totalValue,
 				toContact(request.shipTo()), toContact(request.billTo()),
-				new OrderCreditCard(request.creditCard().cardNumber(), request.creditCard().cardType(),
-						request.creditCard().expiryDate()),
+				toCreditCard(request.creditCard(), customer),
 				lines);
 		orderRepository.save(order);
 
@@ -110,8 +111,9 @@ public class OrderService {
 	}
 
 	/**
-	 * Prices one line from the {@code items}/{@code products} collections:
-	 * per-locale listPrice with en_US fallback (the same rule catalog reads use).
+	 * Prices one line from the {@code items}/{@code products} collections at the
+	 * requested locale's own listPrice. An item with no detail block for that
+	 * locale is rejected, not en_US-priced.
 	 */
 	private OrderLine priceLine(int lineNo, OrderLineRequest lineRequest, String locale) {
 		Document item = mongoTemplate.findById(lineRequest.itemId(), Document.class, "items");
@@ -125,7 +127,12 @@ public class OrderService {
 		Document details = item.get("details", Document.class);
 		Document localeDetail = details.get(locale, Document.class);
 		if (localeDetail == null || localeDetail.get("listPrice") == null) {
-			localeDetail = details.get(DEFAULT_LOCALE, Document.class);
+			// No en_US fallback here, unlike catalog display: prices are per-locale
+			// currencies, so a per-line fallback would sum yen and dollars into one
+			// totalValue. Rejecting matches the legacy, where per-locale catalog
+			// queries meant such an item was never offered to that shopper at all.
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+					"item " + lineRequest.itemId() + " not available in locale " + locale);
 		}
 		BigDecimal unitPrice = toBigDecimal(localeDetail.get("listPrice"));
 
@@ -133,14 +140,28 @@ public class OrderService {
 				lineRequest.qty(), unitPrice, 0);
 	}
 
-	private String customerEmail(String userId) {
-		Document customer = mongoTemplate.findById(userId, Document.class, "customers");
+	private String customerEmail(Document customer) {
 		if (customer == null) {
 			return null;
 		}
 		Document account = customer.get("account", Document.class);
 		Document contactInfo = account == null ? null : account.get("contactInfo", Document.class);
 		return contactInfo == null ? null : contactInfo.getString("email");
+	}
+
+	/**
+	 * The customer API serves masked card numbers, and the checkout form
+	 * round-trips them; a masked number here means "the card on file", so the
+	 * order snapshot takes the stored number instead of the mask.
+	 */
+	private OrderCreditCard toCreditCard(OrderCreditCardDto dto, Document customer) {
+		String cardNumber = dto.cardNumber();
+		if (cardNumber != null && cardNumber.contains("*")) {
+			Document account = customer == null ? null : customer.get("account", Document.class);
+			Document storedCard = account == null ? null : account.get("creditCard", Document.class);
+			cardNumber = storedCard == null ? null : storedCard.getString("cardNumber");
+		}
+		return new OrderCreditCard(cardNumber, dto.cardType(), dto.expiryDate());
 	}
 
 	/** The mapping layer stores BigDecimal as Decimal128 or String depending on configuration. */

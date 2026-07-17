@@ -127,18 +127,17 @@ class OrderControllerIntegrationTest {
 	}
 
 	@Test
-	void itemWithoutTheRequestedLocaleIsPricedFromItsEnUsBlock() throws Exception {
+	void itemWithoutTheRequestedLocaleIsRejectedNotPricedInAnotherCurrency() throws Exception {
 		String token = loginAndGetToken("j2ee", "j2ee");
 
-		// EST-15 has no ja_JP ItemDetails: a ja_JP order must fall back to the
-		// en_US price (23.50) — the same whole-block fallback rule catalog reads use.
+		// EST-15 has no ja_JP ItemDetails. Falling back to its en_US price would
+		// sum dollars into a yen totalValue, so the line is rejected — in the
+		// legacy, per-locale catalog queries meant a ja_JP shopper never saw it.
 		mockMvc.perform(post("/api/orders")
 						.header("Authorization", "Bearer " + token)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(orderBody("ja_JP", "EST-15", 1)))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.lines[0].unitPrice").value(23.50))
-				.andExpect(jsonPath("$.totalValue").value(23.50));
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test

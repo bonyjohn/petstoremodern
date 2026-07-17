@@ -9,6 +9,14 @@ const CURRENCY_CODES: Record<Locale, string> = {
   zh_CN: 'CNY',
 };
 
+/**
+ * Currency label for any locale string — orders carry their own locale, so
+ * their totals format in that currency, not the toolbar's current one.
+ */
+export function currencyCodeFor(locale: string): string {
+  return CURRENCY_CODES[locale as Locale] ?? 'USD';
+}
+
 /** The shopper's selected catalog locale, shared across the toolbar and every catalog page. */
 @Injectable({ providedIn: 'root' })
 export class LocaleService {

@@ -1,7 +1,9 @@
 package com.petstore.core.customer.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,6 +17,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import com.petstore.core.customer.repository.CustomerRepository;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -39,6 +43,9 @@ class CustomerAuthIntegrationTest {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private CustomerRepository customerRepository;
+
 	@Test
 	void loginAsMigratedJ2eeSucceedsAndTheTokenReadsBackTheLegacyContactInfo() throws Exception {
 		String token = loginAndGetToken("j2ee", "j2ee");
@@ -52,6 +59,32 @@ class CustomerAuthIntegrationTest {
 				.andExpect(jsonPath("$.account.contactInfo.address.street[0]").value("1234 Anywhere Street"))
 				.andExpect(jsonPath("$.account.contactInfo.address.street[1]").value("Unit 555"))
 				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+	}
+
+	@Test
+	void cardNumberIsMaskedInResponsesAndSavingTheMaskBackKeepsTheStoredNumber() throws Exception {
+		String token = loginAndGetToken("j2ee", "j2ee");
+
+		// The API serves a masked PAN...
+		String me = mockMvc.perform(get("/api/customers/me").header("Authorization", "Bearer " + token))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.account.creditCard.cardNumber").value("**** 6789"))
+				.andReturn().getResponse().getContentAsString();
+
+		// ...and round-tripping it through PUT (the account form's save) must
+		// retain the stored number, not overwrite the card with the mask.
+		var meJson = objectMapper.readTree(me);
+		String update = "{\"account\":%s,\"profile\":%s}"
+				.formatted(meJson.get("account").toString(), meJson.get("profile").toString());
+		mockMvc.perform(put("/api/customers/me")
+						.header("Authorization", "Bearer " + token)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(update))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.account.creditCard.cardNumber").value("**** 6789"));
+
+		assertThat(customerRepository.findById("j2ee").orElseThrow().account().creditCard().cardNumber())
+				.isEqualTo("123456789"); // stored value intact, never the mask
 	}
 
 	@Test

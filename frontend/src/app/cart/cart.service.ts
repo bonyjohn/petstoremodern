@@ -5,16 +5,17 @@ import { CartItem } from './cart.models';
 const STORAGE_KEY = 'petstore.cart';
 
 /**
- * Client-side shopping cart, persisted to localStorage. No server calls — the legacy
- * cart lived in the HTTP session; here it's entirely the shopper's browser until
- * checkout posts it to the order service (a later part).
+ * Client-side shopping cart, persisted to localStorage. Holds itemId + qty
+ * only; display data (name, image, price) is looked up from the catalog at
+ * the current locale by whoever renders the cart. No server calls — the
+ * legacy cart lived in the HTTP session; here it's entirely the shopper's
+ * browser until checkout posts it to the order service.
  */
 @Injectable({ providedIn: 'root' })
 export class CartService {
   readonly items = signal<CartItem[]>(loadFromStorage());
 
   readonly count = computed(() => this.items().reduce((sum, item) => sum + item.qty, 0));
-  readonly subtotal = computed(() => this.items().reduce((sum, item) => sum + item.qty * item.unitPrice, 0));
 
   constructor() {
     effect(() => {
@@ -22,13 +23,13 @@ export class CartService {
     });
   }
 
-  add(item: Omit<CartItem, 'qty'>, qty = 1): void {
-    const existing = this.items().find((i) => i.itemId === item.itemId);
+  add(itemId: string, qty = 1): void {
+    const existing = this.items().find((i) => i.itemId === itemId);
     if (existing) {
-      this.updateQty(item.itemId, existing.qty + qty);
+      this.updateQty(itemId, existing.qty + qty);
       return;
     }
-    this.items.update((items) => [...items, { ...item, qty }]);
+    this.items.update((items) => [...items, { itemId, qty }]);
   }
 
   updateQty(itemId: string, qty: number): void {
@@ -48,7 +49,20 @@ export class CartService {
   }
 }
 
+/**
+ * Older payloads carried price/name snapshots; keep only identity + quantity
+ * and drop anything malformed — a bad entry must never break the page.
+ */
 function loadFromStorage(): CartItem[] {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored ? JSON.parse(stored) : [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter((entry) => entry && typeof entry.itemId === 'string' && Number.isFinite(entry.qty) && entry.qty > 0)
+      .map((entry) => ({ itemId: entry.itemId, qty: Math.floor(entry.qty) }));
+  } catch {
+    return [];
+  }
 }

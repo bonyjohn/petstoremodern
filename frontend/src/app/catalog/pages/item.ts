@@ -82,12 +82,6 @@ export class ItemPage {
   }
 
   onAddToCart(item: ItemResponse): void {
-    this.cartService.add({
-      itemId: item.itemId,
-      productId: item.productId,
-      name: item.name,
-      image: item.image,
-      unitPrice: item.listPrice,
-    });
+    this.cartService.add(item.itemId);
   }
 }

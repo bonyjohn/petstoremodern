@@ -2,10 +2,12 @@ package com.petstore.core.order.service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.springframework.context.event.EventListener;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import com.petstore.core.common.EventPublisher;
@@ -28,10 +30,13 @@ public class ApprovalService {
 
 	private final OrderRepository orderRepository;
 	private final EventPublisher eventPublisher;
+	private final MongoTemplate mongoTemplate;
 
-	public ApprovalService(OrderRepository orderRepository, EventPublisher eventPublisher) {
+	public ApprovalService(OrderRepository orderRepository, EventPublisher eventPublisher,
+			MongoTemplate mongoTemplate) {
 		this.orderRepository = orderRepository;
 		this.eventPublisher = eventPublisher;
+		this.mongoTemplate = mongoTemplate;
 	}
 
 	/**
@@ -68,13 +73,19 @@ public class ApprovalService {
 				.orElseThrow(() -> new IllegalStateException("No such order: " + orderId));
 		OrderStatus next = OrderTransitions.next(order.status(), target);
 
-		List<StatusChange> history = new ArrayList<>(order.statusHistory());
-		history.add(new StatusChange(next, Instant.now()));
-
-		orderRepository.save(new OrderDocument(
-				order.id(), order.userId(), order.email(), order.locale(), order.orderDate(),
-				next, history, order.totalValue(), order.shipTo(), order.billTo(),
-				order.creditCard(), order.lines()));
+		// The state machine validates the pair; the database enforces it: the
+		// update only lands if the status is still the one we validated against,
+		// so two concurrent approvals can't both write (and double-fire events).
+		long modified = mongoTemplate.updateFirst(
+				Query.query(Criteria.where("_id").is(orderId).and("status").is(order.status())),
+				new Update()
+						.set("status", next)
+						.push("statusHistory", new StatusChange(next, Instant.now())),
+				OrderDocument.class).getModifiedCount();
+		if (modified == 0) {
+			throw new IllegalStateException(
+					"Order " + orderId + " was transitioned concurrently; expected status " + order.status());
+		}
 
 		eventPublisher.publish(new OrderStatusChangedEvent(order.id(), next.name(), order.email()));
 	}

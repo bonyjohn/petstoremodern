@@ -18,6 +18,11 @@ public class Notifier {
 
 	@EventListener
 	public void onOrderStatusChanged(OrderStatusChangedEvent event) {
+		if (event.email() == null) {
+			log.info("Order {} is now {} — customer has no email on file, nothing to send",
+					event.orderId(), event.status());
+			return;
+		}
 		log.info("Email to {}: your order {} is now {}", event.email(), event.orderId(), event.status());
 	}
 }
