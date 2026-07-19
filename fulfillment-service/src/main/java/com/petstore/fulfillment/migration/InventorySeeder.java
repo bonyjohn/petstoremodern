@@ -40,8 +40,6 @@ public class InventorySeeder implements ApplicationRunner {
 		List<String> itemIds = new ArrayList<>();
 		mongoTemplate.getCollection("items").distinct("_id", String.class).into(itemIds);
 
-		// An empty bulk must not execute (the driver rejects it) — and an empty items
-		// collection means core hasn't seeded yet, which is worth a loud hint.
 		if (itemIds.isEmpty()) {
 			log.warn("Inventory not seeded: items collection is empty (has core seeded yet?)");
 			return;
