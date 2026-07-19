@@ -20,7 +20,6 @@ import com.petstore.core.catalog.repository.ProductRepository;
 import com.petstore.core.catalog.web.CategoryResponse;
 import com.petstore.core.catalog.web.ItemResponse;
 import com.petstore.core.catalog.web.ProductResponse;
-import com.petstore.core.catalog.web.ProductSummaryResponse;
 
 /**
  * Localizes catalog documents to the requested locale (falling back to en_US)
@@ -52,9 +51,9 @@ public class CatalogService {
 				.toList();
 	}
 
-	public List<ProductSummaryResponse> listProductsInCategory(String categoryId, String locale) {
+	public List<ProductResponse> listProductsInCategory(String categoryId, String locale) {
 		return productRepository.findByCategoryId(categoryId, FULL_CATALOG_PAGE).stream()
-				.map(product -> toProductSummary(product, locale))
+				.map(product -> toProductResponse(product, locale))
 				.toList();
 	}
 
@@ -74,9 +73,9 @@ public class CatalogService {
 				.map(row -> toItemResponse(row, locale));
 	}
 
-	public List<ProductSummaryResponse> search(String query, String locale) {
+	public List<ProductResponse> search(String query, String locale) {
 		return productRepository.search(query, FULL_CATALOG_PAGE).stream()
-				.map(product -> toProductSummary(product, locale))
+				.map(product -> toProductResponse(product, locale))
 				.toList();
 	}
 
@@ -102,11 +101,6 @@ public class CatalogService {
 	private CategoryResponse toCategoryResponse(CategoryDocument category, String locale) {
 		LocaleDetail detail = category.details().forLocale(locale).orElse(EMPTY_DETAIL);
 		return new CategoryResponse(category.id(), detail.name(), detail.image());
-	}
-
-	private ProductSummaryResponse toProductSummary(ProductDocument product, String locale) {
-		LocaleDetail detail = localeDetail(product.details(), locale);
-		return new ProductSummaryResponse(product.id(), detail.name(), detail.image(), detail.description());
 	}
 
 	private ProductResponse toProductResponse(ProductDocument product, String locale) {

@@ -4,7 +4,7 @@ import { CardModule } from 'primeng/card';
 
 import { CatalogService } from '../catalog.service';
 import { LocaleService } from '../locale.service';
-import { ProductSummaryResponse } from '../catalog.models';
+import { ProductResponse } from '../catalog.models';
 
 /** Category page: the products in one category (legacy category page). */
 @Component({
@@ -66,7 +66,7 @@ export class CategoryPage {
   private readonly catalogService = inject(CatalogService);
   private readonly localeService = inject(LocaleService);
 
-  readonly products = signal<ProductSummaryResponse[]>([]);
+  readonly products = signal<ProductResponse[]>([]);
 
   constructor() {
     effect(() => {

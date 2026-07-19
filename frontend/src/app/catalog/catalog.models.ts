@@ -4,13 +4,6 @@ export interface CategoryResponse {
   image: string;
 }
 
-export interface ProductSummaryResponse {
-  productId: string;
-  name: string;
-  image: string;
-  description: string;
-}
-
 export interface ProductResponse {
   productId: string;
   categoryId: string;

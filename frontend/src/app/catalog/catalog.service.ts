@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { CategoryResponse, ItemResponse, ProductResponse, ProductSummaryResponse } from './catalog.models';
+import { CategoryResponse, ItemResponse, ProductResponse } from './catalog.models';
 
 /** Typed client for `/api/catalog/...`, matching the backend's DTOs. */
 @Injectable({ providedIn: 'root' })
@@ -14,8 +14,8 @@ export class CatalogService {
     return this.http.get<CategoryResponse[]>(`${this.baseUrl}/categories`, { params: { locale } });
   }
 
-  productsInCategory(categoryId: string, locale: string): Observable<ProductSummaryResponse[]> {
-    return this.http.get<ProductSummaryResponse[]>(
+  productsInCategory(categoryId: string, locale: string): Observable<ProductResponse[]> {
+    return this.http.get<ProductResponse[]>(
       `${this.baseUrl}/categories/${categoryId}/products`,
       { params: { locale } },
     );
@@ -33,7 +33,7 @@ export class CatalogService {
     return this.http.get<ItemResponse>(`${this.baseUrl}/items/${itemId}`, { params: { locale } });
   }
 
-  search(query: string, locale: string): Observable<ProductSummaryResponse[]> {
-    return this.http.get<ProductSummaryResponse[]>(`${this.baseUrl}/search`, { params: { q: query, locale } });
+  search(query: string, locale: string): Observable<ProductResponse[]> {
+    return this.http.get<ProductResponse[]>(`${this.baseUrl}/search`, { params: { q: query, locale } });
   }
 }

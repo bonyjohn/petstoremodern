@@ -4,7 +4,7 @@ import { CardModule } from 'primeng/card';
 
 import { CatalogService } from '../catalog.service';
 import { LocaleService } from '../locale.service';
-import { ProductSummaryResponse } from '../catalog.models';
+import { ProductResponse } from '../catalog.models';
 
 /** Search results page: products matching the toolbar search box (legacy catalog search). */
 @Component({
@@ -72,7 +72,7 @@ export class SearchPage {
   private readonly catalogService = inject(CatalogService);
   private readonly localeService = inject(LocaleService);
 
-  readonly results = signal<ProductSummaryResponse[]>([]);
+  readonly results = signal<ProductResponse[]>([]);
 
   constructor() {
     effect(() => {

@@ -28,7 +28,7 @@ public class CatalogController {
 	}
 
 	@GetMapping("/categories/{id}/products")
-	public List<ProductSummaryResponse> productsInCategory(
+	public List<ProductResponse> productsInCategory(
 			@PathVariable String id, @RequestParam(defaultValue = "en_US") String locale) {
 		return catalogService.listProductsInCategory(id, locale);
 	}
@@ -56,7 +56,7 @@ public class CatalogController {
 	}
 
 	@GetMapping("/search")
-	public List<ProductSummaryResponse> search(
+	public List<ProductResponse> search(
 			@RequestParam String q, @RequestParam(defaultValue = "en_US") String locale) {
 		return catalogService.search(q, locale);
 	}
