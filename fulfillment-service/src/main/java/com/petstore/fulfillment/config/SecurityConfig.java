@@ -22,6 +22,9 @@ public class SecurityConfig {
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers("/actuator/health", "/actuator/info").permitAll()
+				// Boot re-dispatches failed requests to /error; without this, a 400 on a
+				// public endpoint is masked as 401 for anonymous callers.
+				.requestMatchers("/error").permitAll()
 				.requestMatchers("/api/inventory/**").hasRole("ADMIN")
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
