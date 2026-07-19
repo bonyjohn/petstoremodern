@@ -16,3 +16,9 @@ dist/
 
 # OS
 .DS_Store
+
+# Local-only (kept on disk, not checked in)
+.github/workflows/
+.mvn/wrapper/
+CLAUDE.md
+docs/

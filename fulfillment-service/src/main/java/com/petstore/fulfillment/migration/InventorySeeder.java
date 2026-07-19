@@ -1,4 +1,4 @@
-package com.petstore.fulfillment.inventory;
+package com.petstore.fulfillment.migration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.mongodb.core.BulkOperations;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -39,12 +40,20 @@ public class InventorySeeder implements ApplicationRunner {
 		List<String> itemIds = new ArrayList<>();
 		mongoTemplate.getCollection("items").distinct("_id", String.class).into(itemIds);
 
-		for (String itemId : itemIds) {
-			mongoTemplate.upsert(
-					Query.query(Criteria.where("_id").is(itemId)),
-					new Update().setOnInsert("quantityOnHand", LEGACY_DEFAULT_QUANTITY),
-					"inventory");
+		// An empty bulk must not execute (the driver rejects it) — and an empty items
+		// collection means core hasn't seeded yet, which is worth a loud hint.
+		if (itemIds.isEmpty()) {
+			log.warn("Inventory not seeded: items collection is empty (has core seeded yet?)");
+			return;
 		}
+
+		BulkOperations bulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, "inventory");
+		for (String itemId : itemIds) {
+			bulkOps.upsert(
+					Query.query(Criteria.where("_id").is(itemId)),
+					new Update().setOnInsert("quantityOnHand", LEGACY_DEFAULT_QUANTITY));
+		}
+		bulkOps.execute();
 
 		log.info("Inventory seeded: {} items at up to {} on hand each", itemIds.size(), LEGACY_DEFAULT_QUANTITY);
 	}
