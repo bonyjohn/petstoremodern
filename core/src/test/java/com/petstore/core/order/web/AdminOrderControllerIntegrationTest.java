@@ -14,8 +14,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -30,6 +31,7 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
 		properties = "petstore.seed=true")
 @AutoConfigureMockMvc
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @TestMethodOrder(OrderAnnotation.class)
 class AdminOrderControllerIntegrationTest {
 
@@ -47,8 +49,8 @@ class AdminOrderControllerIntegrationTest {
 	@Order(1)
 	void pendingOrdersShowUpInTheAdminQueueWithTheirOwner() throws Exception {
 		String j2ee = loginAndGetToken("j2ee", "j2ee");
-		placeBigPendingOrder(j2ee); // 1001
-		placeBigPendingOrder(j2ee); // 1002
+		placeBigPendingOrder(j2ee); 
+		placeBigPendingOrder(j2ee);
 
 		String admin = loginAndGetToken("admin", "admin123");
 		mockMvc.perform(get("/api/admin/orders").param("status", "PENDING")

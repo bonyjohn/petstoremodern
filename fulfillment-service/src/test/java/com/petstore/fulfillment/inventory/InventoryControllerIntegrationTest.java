@@ -13,20 +13,22 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /** Admin-only inventory REST: role enforcement and the read/update roundtrip. */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @AutoConfigureMockMvc
 class InventoryControllerIntegrationTest {
 
 	@Container
 	@ServiceConnection
-	static MongoDBContainer mongo = new MongoDBContainer("mongo:8");
+	static MongoDBContainer mongo = new MongoDBContainer("mongo:8").withReplicaSet();
 
 	@Autowired
 	private MockMvc mockMvc;

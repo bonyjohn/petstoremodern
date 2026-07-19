@@ -11,26 +11,19 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 /**
- * Skeleton rules guarding the module boundaries:
- * catalog, customer, order and notification are independent business modules
- * that may depend on common but not on each other's internals.
+ * Skeleton rules guarding the module boundaries: catalog, customer, order and
+ * notification are independent business modules that may depend on common but
+ * not on each other's internals.
  */
 class ModuleBoundariesTest {
 
 	private static final JavaClasses CLASSES = new ClassFileImporter()
-		.withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-		.importPackages("com.petstore.core");
+			.withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS).importPackages("com.petstore.core");
 
-	/**
-	 * Migration code (legacy parsing/conversion/seeding) is scaffolding with a
-	 * one-way dependency: it may use the application modules, but application
-	 * code must never depend on it — retiring the legacy system must be a
-	 * package deletion, nothing more.
-	 */
 	@Test
 	void applicationCodeDoesNotDependOnMigration() {
-		ArchRule rule = noClasses().that().resideOutsideOfPackage("com.petstore.core.migration..")
-				.should().dependOnClassesThat().resideInAPackage("com.petstore.core.migration..");
+		ArchRule rule = noClasses().that().resideOutsideOfPackage("com.petstore.core.migration..").should()
+				.dependOnClassesThat().resideInAPackage("com.petstore.core.migration..");
 		rule.check(CLASSES);
 	}
 
@@ -42,45 +35,33 @@ class ModuleBoundariesTest {
 
 	@Test
 	void catalogShouldNotDependOnOtherBusinessModules() {
-		ArchRule rule = classes().that().resideInAPackage("com.petstore.core.catalog..")
-			.should().onlyDependOnClassesThat()
-			.resideOutsideOfPackages(
-				"com.petstore.core.customer..",
-				"com.petstore.core.order..",
-				"com.petstore.core.notification..");
+		ArchRule rule = classes().that().resideInAPackage("com.petstore.core.catalog..").should()
+				.onlyDependOnClassesThat().resideOutsideOfPackages("com.petstore.core.customer..",
+						"com.petstore.core.order..", "com.petstore.core.notification..");
 		rule.check(CLASSES);
 	}
 
 	@Test
 	void customerShouldNotDependOnOtherBusinessModules() {
-		ArchRule rule = classes().that().resideInAPackage("com.petstore.core.customer..")
-			.should().onlyDependOnClassesThat()
-			.resideOutsideOfPackages(
-				"com.petstore.core.catalog..",
-				"com.petstore.core.order..",
-				"com.petstore.core.notification..");
+		ArchRule rule = classes().that().resideInAPackage("com.petstore.core.customer..").should()
+				.onlyDependOnClassesThat().resideOutsideOfPackages("com.petstore.core.catalog..",
+						"com.petstore.core.order..", "com.petstore.core.notification..");
 		rule.check(CLASSES);
 	}
 
 	@Test
 	void orderShouldNotDependOnOtherBusinessModules() {
-		ArchRule rule = classes().that().resideInAPackage("com.petstore.core.order..")
-			.should().onlyDependOnClassesThat()
-			.resideOutsideOfPackages(
-				"com.petstore.core.catalog..",
-				"com.petstore.core.customer..",
-				"com.petstore.core.notification..");
+		ArchRule rule = classes().that().resideInAPackage("com.petstore.core.order..").should()
+				.onlyDependOnClassesThat().resideOutsideOfPackages("com.petstore.core.catalog..",
+						"com.petstore.core.customer..", "com.petstore.core.notification..");
 		rule.check(CLASSES);
 	}
 
 	@Test
 	void notificationShouldNotDependOnOtherBusinessModules() {
-		ArchRule rule = classes().that().resideInAPackage("com.petstore.core.notification..")
-			.should().onlyDependOnClassesThat()
-			.resideOutsideOfPackages(
-				"com.petstore.core.catalog..",
-				"com.petstore.core.customer..",
-				"com.petstore.core.order..");
+		ArchRule rule = classes().that().resideInAPackage("com.petstore.core.notification..").should()
+				.onlyDependOnClassesThat().resideOutsideOfPackages("com.petstore.core.catalog..",
+						"com.petstore.core.customer..", "com.petstore.core.order..");
 		rule.check(CLASSES);
 	}
 

@@ -13,8 +13,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -30,6 +31,7 @@ import tools.jackson.databind.ObjectMapper;
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK,
 		properties = "petstore.seed=true")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @AutoConfigureMockMvc
 class CustomerAuthIntegrationTest {
 
@@ -65,14 +67,11 @@ class CustomerAuthIntegrationTest {
 	void cardNumberIsMaskedInResponsesAndSavingTheMaskBackKeepsTheStoredNumber() throws Exception {
 		String token = loginAndGetToken("j2ee", "j2ee");
 
-		// The API serves a masked PAN...
 		String me = mockMvc.perform(get("/api/customers/me").header("Authorization", "Bearer " + token))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.account.creditCard.cardNumber").value("**** 6789"))
 				.andReturn().getResponse().getContentAsString();
 
-		// ...and round-tripping it through PUT (the account form's save) must
-		// retain the stored number, not overwrite the card with the mask.
 		var meJson = objectMapper.readTree(me);
 		String update = "{\"account\":%s,\"profile\":%s}"
 				.formatted(meJson.get("account").toString(), meJson.get("profile").toString());
@@ -84,7 +83,7 @@ class CustomerAuthIntegrationTest {
 				.andExpect(jsonPath("$.account.creditCard.cardNumber").value("**** 6789"));
 
 		assertThat(customerRepository.findById("j2ee").orElseThrow().account().creditCard().cardNumber())
-				.isEqualTo("123456789"); // stored value intact, never the mask
+				.isEqualTo("123456789");
 	}
 
 	@Test
@@ -153,6 +152,6 @@ class CustomerAuthIntegrationTest {
 						.content(objectMapper.writeValueAsString(new LoginRequest(username, password))))
 				.andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
-		return objectMapper.readTree(body).get("token").asText();
+		return objectMapper.readTree(body).get("token").asString();
 	}
 }

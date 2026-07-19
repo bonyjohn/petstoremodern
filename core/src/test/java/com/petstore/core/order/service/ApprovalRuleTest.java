@@ -20,7 +20,6 @@ class ApprovalRuleTest {
 
 	@Test
 	void enUsExactly500IsNotApproved() {
-		// Strictly less than — a $500.00 order waits for the admin.
 		assertThat(ApprovalService.canIApprove("en_US", new BigDecimal("500"))).isFalse();
 		assertThat(ApprovalService.canIApprove("en_US", new BigDecimal("500.00"))).isFalse();
 	}

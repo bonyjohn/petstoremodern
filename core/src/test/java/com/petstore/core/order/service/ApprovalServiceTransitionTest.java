@@ -60,7 +60,7 @@ class ApprovalServiceTransitionTest {
 	@Test
 	void losingTheRaceToAConcurrentTransitionThrowsAndPublishesNothing() {
 		givenOrder(OrderStatus.PENDING);
-		givenUpdateModifies(0); // another writer flipped the status first
+		givenUpdateModifies(0);
 
 		assertThatThrownBy(() -> approvalService.approve("1001"))
 				.isInstanceOf(IllegalStateException.class)

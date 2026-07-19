@@ -40,7 +40,6 @@ public class InternalOrderController {
 	public void shipments(@PathVariable String id,
 			@RequestHeader(name = "X-Internal-Token", required = false) String token,
 			@Valid @RequestBody ShipmentRequest request) {
-		// Constant-time comparison — a plain equals() leaks a timing oracle.
 		if (token == null || !MessageDigest.isEqual(
 				internalToken.getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8))) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "bad internal token");

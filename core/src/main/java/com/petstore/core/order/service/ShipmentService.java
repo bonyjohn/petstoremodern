@@ -59,10 +59,10 @@ public class ShipmentService {
 			OrderStatus target = statusFor(lines);
 			boolean statusChanged = target != order.status();
 			if (!statusChanged && lines.equals(order.lines())) {
-				return; // replay no-op: nothing new shipped, nothing to transition
+				return; 
 			}
 			if (statusChanged) {
-				OrderTransitions.next(order.status(), target); // throws on an illegal pair
+				OrderTransitions.next(order.status(), target); 
 			}
 
 			Update update = new Update().set("lines", lines).set("status", target);
@@ -80,8 +80,6 @@ public class ShipmentService {
 				}
 				return;
 			}
-			// Lost the race to a concurrent transition: loop once to re-read and
-			// re-apply; if the second pass finds nothing left to do it no-ops.
 		}
 	}
 
