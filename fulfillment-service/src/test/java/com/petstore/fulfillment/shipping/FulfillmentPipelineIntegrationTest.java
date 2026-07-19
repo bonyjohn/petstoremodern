@@ -1,6 +1,7 @@
 package com.petstore.fulfillment.shipping;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import java.io.IOException;
@@ -234,6 +235,25 @@ class FulfillmentPipelineIntegrationTest {
 			assertThat(onHand("EST-1")).isEqualTo(9988L); // 9990 - 1 (o-6) - 1 (o-7)
 		});
 		listenerB.stop();
+	}
+
+	@Test
+	@Order(7)
+	void callbackFailureRestocksSoRetriesDoNotLeakInventory() {
+		mongoTemplate.getCollection("inventory")
+				.insertOne(new Document("_id", "EST-3").append("quantityOnHand", 50L));
+
+		// A processor whose "core" is unreachable — the callback always fails.
+		ApprovedOrderProcessor unreachableCore =
+				new ApprovedOrderProcessor(mongoTemplate, "http://localhost:1", "irrelevant");
+		ApprovedOrder order = ApprovedOrder.from(approvedOrder("o-8", "EST-3", 5));
+
+		// Each attempt decrements, fails the callback, and compensates: however
+		// many times the sweep retries, no stock leaks.
+		for (int attempt = 0; attempt < 3; attempt++) {
+			assertThatThrownBy(() -> unreachableCore.process(order)).isInstanceOf(RuntimeException.class);
+		}
+		assertThat(onHand("EST-3")).isEqualTo(50L);
 	}
 
 	private Document approvedOrder(String orderId, String itemId, int qty) {

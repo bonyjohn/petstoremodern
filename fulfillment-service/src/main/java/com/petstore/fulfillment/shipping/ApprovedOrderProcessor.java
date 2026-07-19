@@ -2,9 +2,7 @@ package com.petstore.fulfillment.shipping;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
-import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,12 +14,17 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import com.petstore.fulfillment.inventory.InventoryDocument;
+
 /**
  * Ships an approved order: decrements inventory per line and reports the shipped
  * quantities back to core's internal callback. Safe under at-least-once delivery:
  * the decrement is bounded by the order's remaining unshipped quantity (which core
  * advances on every callback), and core's callback is itself qtyShipped-guarded —
  * so replaying an already-shipped order decrements nothing and changes nothing.
+ * If the callback itself fails (core unreachable), the decrement is compensated
+ * back into stock before rethrowing, so periodic sweep retries don't leak
+ * inventory while core is down.
  */
 @Component
 public class ApprovedOrderProcessor {
@@ -40,55 +43,61 @@ public class ApprovedOrderProcessor {
 		this.internalToken = internalToken;
 	}
 
-	public void process(Document order) {
-		String orderId = order.getString("_id");
-		List<Document> shipments = new ArrayList<>();
+	public void process(ApprovedOrder order) {
+		List<ShipmentCallback.ShipmentLine> shipments = new ArrayList<>();
 
-		for (Document line : order.getList("lines", Document.class)) {
-			String itemId = line.getString("itemId");
-			int qty = line.getInteger("qty", 0);
-			int qtyShipped = line.getInteger("qtyShipped", 0);
-			int shipped = reserve(itemId, qty, qtyShipped);
+		for (ApprovedOrder.Line line : order.lines()) {
+			int shipped = reserve(line.itemId(), line.qty(), line.qtyShipped());
 			if (shipped > 0) {
-				shipments.add(new Document("itemId", itemId).append("qtyShipped", shipped));
+				shipments.add(new ShipmentCallback.ShipmentLine(line.itemId(), shipped));
 			}
 		}
 
 		if (shipments.isEmpty()) {
-			log.info("Order {}: nothing to ship (already shipped or no stock)", orderId);
+			log.info("Order {}: nothing to ship (already shipped or no stock)", order.orderId());
 			return;
 		}
 
-		restClient.post()
-				.uri("/api/internal/orders/{id}/shipments", orderId)
-				.header("X-Internal-Token", internalToken)
-				.contentType(MediaType.APPLICATION_JSON)
-				.body(Map.of("shipments", shipments))
-				.retrieve()
-				.toBodilessEntity();
+		try {
+			restClient.post()
+					.uri("/api/internal/orders/{id}/shipments", order.orderId())
+					.header("X-Internal-Token", internalToken)
+					.contentType(MediaType.APPLICATION_JSON)
+					.body(new ShipmentCallback(shipments))
+					.retrieve()
+					.toBodilessEntity();
+		} catch (RuntimeException e) {
+			restock(order.orderId(), shipments);
+			throw e;
+		}
 
-		log.info("Order {}: shipped {} line(s), core notified", orderId, shipments.size());
+		log.info("Order {}: shipped {} line(s), core notified", order.orderId(), shipments.size());
 	}
 
-	/**
-	 * Atomically takes up to the line's unshipped remainder from stock. The
-	 * conditional update (quantityOnHand >= take) means on-hand never goes
-	 * negative even under concurrent processors; on a lost race, re-read and retry.
-	 */
+	private void restock(String orderId, List<ShipmentCallback.ShipmentLine> shipments) {
+		for (ShipmentCallback.ShipmentLine shipment : shipments) {
+			mongoTemplate.updateFirst(
+					Query.query(Criteria.where("_id").is(shipment.itemId())),
+					new Update().inc("quantityOnHand", shipment.qtyShipped()),
+					InventoryDocument.class);
+		}
+		log.warn("Order {}: callback failed, returned {} line(s) to stock for retry", orderId, shipments.size());
+	}
+
 	private int reserve(String itemId, int qty, int qtyShipped) {
 		for (int attempt = 0; attempt < 3; attempt++) {
-			Document stock = mongoTemplate.findById(itemId, Document.class, "inventory");
+			InventoryDocument stock = mongoTemplate.findById(itemId, InventoryDocument.class);
 			if (stock == null) {
 				return 0;
 			}
-			int take = ShippingMath.quantityToShip(qty, qtyShipped, ((Number) stock.get("quantityOnHand")).longValue());
+			int take = ShippingMath.quantityToShip(qty, qtyShipped, stock.quantityOnHand());
 			if (take == 0) {
 				return 0;
 			}
 			long modified = mongoTemplate.updateFirst(
 					Query.query(Criteria.where("_id").is(itemId).and("quantityOnHand").gte(take)),
 					new Update().inc("quantityOnHand", -take),
-					"inventory").getModifiedCount();
+					InventoryDocument.class).getModifiedCount();
 			if (modified == 1) {
 				return take;
 			}

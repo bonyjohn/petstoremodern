@@ -39,17 +39,11 @@ public class ApprovalService {
 		this.mongoTemplate = mongoTemplate;
 	}
 
-	/**
-	 * Auto-approval rule, verbatim from the legacy {@code PurchaseOrderMDB.canIApprove}:
-	 * en_US orders strictly under $500 and ja_JP orders strictly under ¥50000 are
-	 * approved automatically; every other locale (including zh_CN) always waits
-	 * for the admin.
-	 */
 	static boolean canIApprove(String locale, BigDecimal totalValue) {
 		return switch (locale) {
-			case "en_US" -> totalValue.compareTo(EN_US_LIMIT) < 0;
-			case "ja_JP" -> totalValue.compareTo(JA_JP_LIMIT) < 0;
-			default -> false;
+		case "en_US" -> totalValue.compareTo(EN_US_LIMIT) < 0;
+		case "ja_JP" -> totalValue.compareTo(JA_JP_LIMIT) < 0;
+		default -> false;
 		};
 	}
 
@@ -73,15 +67,11 @@ public class ApprovalService {
 				.orElseThrow(() -> new IllegalStateException("No such order: " + orderId));
 		OrderStatus next = OrderTransitions.next(order.status(), target);
 
-		// The state machine validates the pair; the database enforces it: the
-		// update only lands if the status is still the one we validated against,
-		// so two concurrent approvals can't both write (and double-fire events).
-		long modified = mongoTemplate.updateFirst(
-				Query.query(Criteria.where("_id").is(orderId).and("status").is(order.status())),
-				new Update()
-						.set("status", next)
-						.push("statusHistory", new StatusChange(next, Instant.now())),
-				OrderDocument.class).getModifiedCount();
+		long modified = mongoTemplate
+				.updateFirst(Query.query(Criteria.where("_id").is(orderId).and("status").is(order.status())),
+						new Update().set("status", next).push("statusHistory", new StatusChange(next, Instant.now())),
+						OrderDocument.class)
+				.getModifiedCount();
 		if (modified == 0) {
 			throw new IllegalStateException(
 					"Order " + orderId + " was transitioned concurrently; expected status " + order.status());

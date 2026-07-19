@@ -80,8 +80,6 @@ public class OrderService {
 				lines);
 		orderRepository.save(order);
 
-		// Synchronous in-process listener may approve immediately; re-read so the
-		// response reflects whatever the pipeline did.
 		eventPublisher.publish(new OrderPlacedEvent(orderId, locale, totalValue));
 		return toResponse(orderRepository.findById(orderId).orElseThrow());
 	}
@@ -127,10 +125,6 @@ public class OrderService {
 		Document details = item.get("details", Document.class);
 		Document localeDetail = details.get(locale, Document.class);
 		if (localeDetail == null || localeDetail.get("listPrice") == null) {
-			// No en_US fallback here, unlike catalog display: prices are per-locale
-			// currencies, so a per-line fallback would sum yen and dollars into one
-			// totalValue. Rejecting matches the legacy, where per-locale catalog
-			// queries meant such an item was never offered to that shopper at all.
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
 					"item " + lineRequest.itemId() + " not available in locale " + locale);
 		}

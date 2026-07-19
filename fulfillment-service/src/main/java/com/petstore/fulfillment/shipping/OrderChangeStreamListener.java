@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 import com.mongodb.MongoException;
 import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.MongoCursor;
-import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Updates;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
@@ -51,6 +50,16 @@ public class OrderChangeStreamListener implements SmartLifecycle {
 	private static final String CHECKPOINT_ID = "orders";
 	private static final int CHANGE_STREAM_HISTORY_LOST = 286;
 
+	/** The subscription: writes that leave an order APPROVED. Static, so plain JSON — paste into mongosh to debug. */
+	private static final Document APPROVED_ORDERS_MATCH = Document.parse("""
+			{
+			  "$match": {
+			    "operationType": { "$in": ["insert", "update", "replace"] },
+			    "fullDocument.status": "APPROVED"
+			  }
+			}
+			""");
+
 	private final MongoTemplate mongoTemplate;
 	private final ApprovedOrderProcessor processor;
 	private final ConsumerLease lease;
@@ -75,12 +84,6 @@ public class OrderChangeStreamListener implements SmartLifecycle {
 		thread.start();
 	}
 
-	/**
-	 * Not auto-started with the context: the consumer begins on
-	 * {@code ApplicationReadyEvent}, after the ApplicationRunner seeders — a
-	 * fresh-database first start would otherwise run its pre-stream sweep
-	 * before any inventory exists and skip everything as out-of-stock.
-	 */
 	@Override
 	public boolean isAutoStartup() {
 		return false;
@@ -115,18 +118,11 @@ public class OrderChangeStreamListener implements SmartLifecycle {
 	private void watchLoop() {
 		while (running) {
 			if (!lease.acquireOrRenew()) {
-				// Standby: poll until the holder releases or its lease expires.
 				sleepQuietly();
 				continue;
 			}
 			try {
 				if (loadCheckpoint() == null) {
-					// Nothing to resume from (first-ever start, or a dropped dead
-					// token): the stream will begin at "now", so sweep first to
-					// ship anything approved earlier. With a checkpoint present the
-					// resumed stream replays those events itself — sweeping too
-					// would double-process replayed inserts, whose fullDocument is
-					// insert-time state that the idempotency guard can't see through.
 					sweep.sweep();
 				}
 			} catch (Exception e) {
@@ -135,18 +131,13 @@ public class OrderChangeStreamListener implements SmartLifecycle {
 			try (MongoCursor<ChangeStreamDocument<Document>> cursor = openCursor()) {
 				while (running) {
 					if (!lease.acquireOrRenew()) {
-						// Lost the lease (e.g. stolen after a stall): stop consuming
-						// immediately; the new holder resumes from the shared checkpoint.
 						break;
 					}
-					// tryNext returns null after maxAwaitTime, giving the loop a
-					// chance to renew the lease and notice a stop request without a
-					// cross-thread close.
 					ChangeStreamDocument<Document> event = cursor.tryNext();
 					if (event == null) {
 						continue;
 					}
-					processor.process(event.getFullDocument());
+					processor.process(ApprovedOrder.from(event.getFullDocument()));
 					saveCheckpoint(event.getResumeToken());
 				}
 			} catch (Exception e) {
@@ -165,7 +156,6 @@ public class OrderChangeStreamListener implements SmartLifecycle {
 		}
 	}
 
-	/** {@code ChangeStreamHistoryLost} (code 286), possibly wrapped by the driver. */
 	private boolean isHistoryLost(Throwable e) {
 		for (Throwable t = e; t != null; t = t.getCause()) {
 			if (t instanceof MongoException mongoException
@@ -177,12 +167,8 @@ public class OrderChangeStreamListener implements SmartLifecycle {
 	}
 
 	private MongoCursor<ChangeStreamDocument<Document>> openCursor() {
-		List<org.bson.conversions.Bson> pipeline = List.of(Aggregates.match(Filters.and(
-				Filters.in("operationType", List.of("insert", "update", "replace")),
-				Filters.eq("fullDocument.status", "APPROVED"))));
-
 		ChangeStreamIterable<Document> stream = mongoTemplate.getCollection("orders")
-				.watch(pipeline)
+				.watch(List.of(APPROVED_ORDERS_MATCH))
 				.fullDocument(FullDocument.UPDATE_LOOKUP)
 				.maxAwaitTime(500, TimeUnit.MILLISECONDS);
 

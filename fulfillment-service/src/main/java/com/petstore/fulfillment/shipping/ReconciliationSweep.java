@@ -1,16 +1,11 @@
 package com.petstore.fulfillment.shipping;
 
-import java.util.List;
-
 import org.bson.Document;
-import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
-import com.mongodb.client.model.Filters;
 
 /**
  * Reconciliation sweep: finds every order that should ship but hasn't —
@@ -31,6 +26,22 @@ public class ReconciliationSweep {
 
 	private static final Logger log = LoggerFactory.getLogger(ReconciliationSweep.class);
 
+	/** Status shippable AND any line with qtyShipped < qty. Static, so plain JSON — paste into mongosh to debug. */
+	private static final Document SHIPPABLE_BUT_UNSHIPPED = Document.parse("""
+			{
+			  "status": { "$in": ["APPROVED", "PARTIALLY_SHIPPED"] },
+			  "$expr": {
+			    "$anyElementTrue": {
+			      "$map": {
+			        "input": "$lines",
+			        "as": "line",
+			        "in": { "$lt": ["$$line.qtyShipped", "$$line.qty"] }
+			      }
+			    }
+			  }
+			}
+			""");
+
 	private final MongoTemplate mongoTemplate;
 	private final ApprovedOrderProcessor processor;
 	private final ConsumerLease lease;
@@ -41,26 +52,16 @@ public class ReconciliationSweep {
 		this.lease = lease;
 	}
 
-	/** Ships every shippable-but-unshipped order. Safe to run any time; every step is idempotent. */
 	public void sweep() {
-		Bson shippableButUnshipped = Filters.and(
-				Filters.in("status", List.of("APPROVED", "PARTIALLY_SHIPPED")),
-				Filters.expr(new Document("$anyElementTrue", new Document("$map",
-						new Document("input", "$lines")
-								.append("as", "line")
-								.append("in", new Document("$lt", List.of("$$line.qtyShipped", "$$line.qty")))))));
-
-		for (Document order : mongoTemplate.getCollection("orders").find(shippableButUnshipped)) {
+		for (Document order : mongoTemplate.getCollection("orders").find(SHIPPABLE_BUT_UNSHIPPED)) {
 			try {
-				processor.process(order);
+				processor.process(ApprovedOrder.from(order));
 			} catch (Exception e) {
-				// One unshippable order must not starve the rest; it is retried next sweep.
 				log.warn("Sweep failed for order {}", order.getString("_id"), e);
 			}
 		}
 	}
 
-	/** Periodic pass, only on the instance holding the consumer lease. */
 	@Scheduled(fixedDelayString = "${petstore.fulfillment.sweep-interval}")
 	void scheduledSweep() {
 		if (lease.held()) {

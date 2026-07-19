@@ -45,10 +45,7 @@ public class ConsumerLease {
 		this.renewInterval = renewInterval;
 	}
 
-	/**
-	 * Acquires the lease if free, expired, or already ours; renews when the renew
-	 * interval has passed. Returns whether this instance holds the lease.
-	 */
+
 	public boolean acquireOrRenew() {
 		long now = System.currentTimeMillis();
 		if (held && now - lastRenewedMillis < renewInterval.toMillis()) {
@@ -66,8 +63,6 @@ public class ConsumerLease {
 			lastRenewedMillis = now;
 			return true;
 		} catch (DuplicateKeyException e) {
-			// Another instance holds an unexpired lease: the query matched nothing
-			// and the upsert's insert collided with the existing lease document.
 			held = false;
 			return false;
 		} catch (DataAccessException e) {
@@ -76,12 +71,10 @@ public class ConsumerLease {
 		}
 	}
 
-	/** Whether this instance held the lease as of its last acquire/renew attempt. */
 	public boolean held() {
 		return held;
 	}
 
-	/** Expires our own lease immediately so a standby can take over without waiting out the TTL. */
 	public void release() {
 		if (!held) {
 			return;

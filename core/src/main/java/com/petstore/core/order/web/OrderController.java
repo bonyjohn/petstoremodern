@@ -44,8 +44,6 @@ public class OrderController {
 		boolean admin = isAdmin(jwt);
 		return orderService.getForUser(id, jwt.getSubject(), admin)
 				.map(ResponseEntity::ok)
-				// Someone else's order id reads as not-found, never as forbidden — the
-				// response must not confirm the id exists.
 				.orElseGet(() -> ResponseEntity.notFound().build());
 	}
 

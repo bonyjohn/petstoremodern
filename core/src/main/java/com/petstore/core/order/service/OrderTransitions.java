@@ -22,7 +22,6 @@ public final class OrderTransitions {
 		};
 	}
 
-	/** Returns the target status, or throws if the transition is not allowed. */
 	public static OrderStatus next(OrderStatus current, OrderStatus target) {
 		if (!isAllowed(current, target)) {
 			throw new IllegalStateException("Illegal order transition: " + current + " -> " + target);
