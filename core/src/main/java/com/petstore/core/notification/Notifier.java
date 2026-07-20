@@ -8,8 +8,10 @@ import org.springframework.stereotype.Component;
 import com.petstore.core.common.OrderStatusChangedEvent;
 
 /**
- * Log-only stand-in for the legacy MailOrderApprovalMDB: when an order's status
- * changes, "send" the customer an email as a log line.
+ * Log-only stand-in for the legacy mail MDBs: when an order's status changes,
+ * "send" the customer an email as a log line. The legacy's own SendMail flags
+ * shipped as false, so log-only matches its default behavior. To send real
+ * email, call EmailSender.send(...) in place of the log line below.
  */
 @Component
 public class Notifier {
