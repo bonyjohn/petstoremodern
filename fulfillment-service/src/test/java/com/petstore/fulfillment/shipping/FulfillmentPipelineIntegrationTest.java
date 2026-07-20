@@ -130,18 +130,13 @@ class FulfillmentPipelineIntegrationTest {
 	@Test
 	@Order(2)
 	void replayedApprovalOfAShippedOrderDoesNotDecrementAgain() {
-		// Re-deliver o-1 as APPROVED with its qtyShipped already recorded: the
-		// stream fires again, but there is nothing left to ship.
 		mongoTemplate.getCollection("orders").updateOne(
 				Filters.eq("_id", "o-1"), Updates.set("status", "APPROVED"));
-
-		// A second order acts as the fence: once it's processed, the replayed
-		// o-1 event (which precedes it in the stream) has been consumed too.
 		mongoTemplate.getCollection("orders").insertOne(approvedOrder("o-2", "EST-1", 2));
 
 		await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> assertThat(callbacks).containsKey("o-2"));
-		assertThat(callbacks.get("o-1")).hasSize(1); // no second callback for the replay
-		assertThat(onHand("EST-1")).isEqualTo(9997L); // 10000 - 1 (o-1) - 2 (o-2), nothing double-counted
+		assertThat(callbacks.get("o-1")).hasSize(1);
+		assertThat(onHand("EST-1")).isEqualTo(9997L);
 	}
 
 	private Document approvedOrder(String orderId, String itemId, int qty) {

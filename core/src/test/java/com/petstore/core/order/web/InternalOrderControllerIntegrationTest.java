@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -36,7 +37,9 @@ import tools.jackson.databind.ObjectMapper;
 class InternalOrderControllerIntegrationTest {
 
 	private static final String TOKEN_HEADER = "X-Internal-Token";
-	private static final String DEV_TOKEN = "dev-internal-token";
+
+	@Value("${petstore.internal.token}")
+	private String internalToken;
 
 	@Container
 	@ServiceConnection
@@ -54,7 +57,7 @@ class InternalOrderControllerIntegrationTest {
 		String j2ee = loginAndGetToken("j2ee", "j2ee");
 		placeSmallApprovedOrder(j2ee, 2);
 
-		mockMvc.perform(post("/api/internal/orders/1001/shipments").header(TOKEN_HEADER, DEV_TOKEN)
+		mockMvc.perform(post("/api/internal/orders/1001/shipments").header(TOKEN_HEADER, internalToken)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"shipments\":[{\"itemId\":\"EST-1\",\"qtyShipped\":1}]}")).andExpect(status().isOk());
 
@@ -66,7 +69,7 @@ class InternalOrderControllerIntegrationTest {
 	@Test
 	@Order(2)
 	void shippingTheRestCompletesTheOrderWithTheFullAuditTrail() throws Exception {
-		mockMvc.perform(post("/api/internal/orders/1001/shipments").header(TOKEN_HEADER, DEV_TOKEN)
+		mockMvc.perform(post("/api/internal/orders/1001/shipments").header(TOKEN_HEADER, internalToken)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"shipments\":[{\"itemId\":\"EST-1\",\"qtyShipped\":1}]}")).andExpect(status().isOk());
 
@@ -81,7 +84,7 @@ class InternalOrderControllerIntegrationTest {
 	@Test
 	@Order(3)
 	void replayingACallbackOnACompletedOrderIsANoOp() throws Exception {
-		mockMvc.perform(post("/api/internal/orders/1001/shipments").header(TOKEN_HEADER, DEV_TOKEN)
+		mockMvc.perform(post("/api/internal/orders/1001/shipments").header(TOKEN_HEADER, internalToken)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"shipments\":[{\"itemId\":\"EST-1\",\"qtyShipped\":1}]}")).andExpect(status().isOk());
 
