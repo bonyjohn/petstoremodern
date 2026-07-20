@@ -49,10 +49,6 @@ export class CartService {
   }
 }
 
-/**
- * Older payloads carried price/name snapshots; keep only identity + quantity
- * and drop anything malformed — a bad entry must never break the page.
- */
 function loadFromStorage(): CartItem[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');

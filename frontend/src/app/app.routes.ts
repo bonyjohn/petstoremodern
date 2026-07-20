@@ -26,10 +26,8 @@ export const routes: Routes = [
   { path: 'account', component: AccountPage, canActivate: [authGuard] },
   { path: 'cart', component: CartPage },
   { path: 'checkout', component: CheckoutPage, canActivate: [authGuard] },
-  // The exact 'orders' path must be registered before 'orders/:id'.
   { path: 'orders', component: OrdersPage, canActivate: [authGuard] },
   { path: 'orders/:id', component: ConfirmationPage, canActivate: [authGuard] },
-  // Lazy: keeps AG Grid (admin-only) out of the shopper-facing initial bundle.
   {
     path: 'admin/orders',
     loadComponent: () => import('./admin/pages/admin-orders').then((m) => m.AdminOrdersPage),
