@@ -14,7 +14,6 @@ flowchart TB
         catalog["catalog"]
         order["order"]
         notification["notification"]
-        order -- "method call" --> catalog
         order -- "OrderStatusChangedEvent" --> notification
     end
 
@@ -38,8 +37,6 @@ flowchart TB
     coredata -. "approved-but-unshipped query" .-> sweep
     shipment -- "shipment callback (internal token)" --> order
 ```
-
-Each collection has exactly one writer. Fulfillment reads the `orders` change stream but never writes core's data — shipment results return through core's internal REST callback. The change stream is the latency path; the reconciliation sweep (state-based, not event-based) is the delivery guarantee.
 
 ## Prerequisites
 
